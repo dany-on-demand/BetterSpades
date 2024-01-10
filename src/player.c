@@ -925,42 +925,42 @@ void player_coordsystem_adjust2(struct Player* p) {
 	p->orientation.y = -p->orientation.z;
 	p->orientation.z = tmp;
 }
-
-void player_boxclipmove(struct Player* p, float fsynctics) {
-	float offset, m, f, nx, ny, nz, z;
+void player_boxclipmove(struct Player* p, float delta_time) {
+	float z_offset, m, delta_time_scaled, new_x, new_y, new_z, delta_z;
 	long climb = 0;
 
-	f = fsynctics * 32.f;
-	nx = f * p->physics.velocity.x + p->pos.x;
-	ny = f * p->physics.velocity.y + p->pos.y;
+	delta_time_scaled = delta_time * 32.f;
+	new_x = delta_time_scaled * p->physics.velocity.x + p->pos.x;
+	new_y = delta_time_scaled * p->physics.velocity.y + p->pos.y;
 
 	if(p->input.keys.crouch) {
-		offset = 0.45f;
+		z_offset = 0.45f;
 		m = 0.9f;
 	} else {
-		offset = 0.9f;
+		z_offset = 0.9f;
 		m = 1.35f;
 	}
 
-	nz = p->pos.z + offset;
+	new_z = p->pos.z + z_offset;
 
+	float direction_velocity;
 	if(p->physics.velocity.x < 0)
-		f = -0.45f;
+		direction_velocity = -0.45f;
 	else
-		f = 0.45f;
-	z = m;
-	while(z >= -1.36f && !player_clipbox(nx + f, p->pos.y - 0.45f, nz + z)
-		  && !player_clipbox(nx + f, p->pos.y + 0.45f, nz + z))
-		z -= 0.9f;
-	if(z < -1.36f)
-		p->pos.x = nx;
+		direction_velocity = 0.45f;
+	delta_z = m;
+	while(delta_z >= -1.36f && !player_clipbox(new_x + direction_velocity, p->pos.y - 0.45f, new_z + delta_z)
+		  && !player_clipbox(new_x + direction_velocity, p->pos.y + 0.45f, new_z + delta_z))
+		delta_z -= 0.9f;
+	if(delta_z < -1.36f)
+		p->pos.x = new_x;
 	else if(!p->input.keys.crouch && p->orientation.z < 0.5f && !p->input.keys.sprint) {
-		z = 0.35f;
-		while(z >= -2.36f && !player_clipbox(nx + f, p->pos.y - 0.45f, nz + z)
-			  && !player_clipbox(nx + f, p->pos.y + 0.45f, nz + z))
-			z -= 0.9f;
-		if(z < -2.36f) {
-			p->pos.x = nx;
+		delta_z = 0.35f;
+		while(delta_z >= -2.36f && !player_clipbox(new_x + direction_velocity, p->pos.y - 0.45f, new_z + delta_z)
+			  && !player_clipbox(new_x + direction_velocity, p->pos.y + 0.45f, new_z + delta_z))
+			delta_z -= 0.9f;
+		if(delta_z < -2.36f) {
+			p->pos.x = new_x;
 			climb = 1;
 		} else
 			p->physics.velocity.x = 0;
@@ -968,22 +968,22 @@ void player_boxclipmove(struct Player* p, float fsynctics) {
 		p->physics.velocity.x = 0;
 
 	if(p->physics.velocity.y < 0)
-		f = -0.45f;
+		direction_velocity = -0.45f;
 	else
-		f = 0.45f;
-	z = m;
-	while(z >= -1.36f && !player_clipbox(p->pos.x - 0.45f, ny + f, nz + z)
-		  && !player_clipbox(p->pos.x + 0.45f, ny + f, nz + z))
-		z -= 0.9f;
-	if(z < -1.36f)
-		p->pos.y = ny;
+		direction_velocity = 0.45f;
+	delta_z = m;
+	while(delta_z >= -1.36f && !player_clipbox(p->pos.x - 0.45f, new_y + direction_velocity, new_z + delta_z)
+		  && !player_clipbox(p->pos.x + 0.45f, new_y + direction_velocity, new_z + delta_z))
+		delta_z -= 0.9f;
+	if(delta_z < -1.36f)
+		p->pos.y = new_y;
 	else if(!p->input.keys.crouch && p->orientation.z < 0.5f && !p->input.keys.sprint && !climb) {
-		z = 0.35f;
-		while(z >= -2.36f && !player_clipbox(p->pos.x - 0.45f, ny + f, nz + z)
-			  && !player_clipbox(p->pos.x + 0.45f, ny + f, nz + z))
-			z -= 0.9f;
-		if(z < -2.36f) {
-			p->pos.y = ny;
+		delta_z = 0.35f;
+		while(delta_z >= -2.36f && !player_clipbox(p->pos.x - 0.45f, new_y + direction_velocity, new_z + delta_z)
+			  && !player_clipbox(p->pos.x + 0.45f, new_y + direction_velocity, new_z + delta_z))
+			delta_z -= 0.9f;
+		if(delta_z < -2.36f) {
+			p->pos.y = new_y;
 			climb = 1;
 		} else
 			p->physics.velocity.y = 0;
@@ -994,43 +994,43 @@ void player_boxclipmove(struct Player* p, float fsynctics) {
 		p->physics.velocity.x *= 0.5f;
 		p->physics.velocity.y *= 0.5f;
 		p->physics.lastclimb = window_time();
-		nz--;
+		new_z--;
 		m = -1.35f;
 	} else {
 		if(p->physics.velocity.z < 0)
 			m = -m;
-		nz += p->physics.velocity.z * fsynctics * 32.f;
+		new_z += p->physics.velocity.z * delta_time * 32.f;
 	}
 
 	p->physics.airborne = 1;
 
-	if(player_clipbox(p->pos.x - 0.45f, p->pos.y - 0.45f, nz + m)
-	   || player_clipbox(p->pos.x - 0.45f, p->pos.y + 0.45f, nz + m)
-	   || player_clipbox(p->pos.x + 0.45f, p->pos.y - 0.45f, nz + m)
-	   || player_clipbox(p->pos.x + 0.45f, p->pos.y + 0.45f, nz + m)) {
+	if(player_clipbox(p->pos.x - 0.45f, p->pos.y - 0.45f, new_z + m)
+	   || player_clipbox(p->pos.x - 0.45f, p->pos.y + 0.45f, new_z + m)
+	   || player_clipbox(p->pos.x + 0.45f, p->pos.y - 0.45f, new_z + m)
+	   || player_clipbox(p->pos.x + 0.45f, p->pos.y + 0.45f, new_z + m)) {
 		if(p->physics.velocity.z >= 0) {
 			p->physics.wade = p->pos.z > 61;
 			p->physics.airborne = 0;
 		}
 		p->physics.velocity.z = 0;
 	} else
-		p->pos.z = nz - offset;
+		p->pos.z = new_z - z_offset;
 
 	player_reposition(p);
 }
 
-int player_move(struct Player* p, float fsynctics, int id) {
+int player_move(struct Player* p, float delta_time, int id) {
 	if(!p->alive) {
-		p->physics.velocity.y -= fsynctics;
+		p->physics.velocity.y -= delta_time;
 		AABB dead_bb = {0};
 		aabb_set_size(&dead_bb, 0.7F, 0.15F, 0.7F);
-		aabb_set_center(&dead_bb, p->pos.x + p->physics.velocity.x * fsynctics * 32.0F,
-						p->pos.y + p->physics.velocity.y * fsynctics * 32.0F,
-						p->pos.z + p->physics.velocity.z * fsynctics * 32.0F);
+		aabb_set_center(&dead_bb, p->pos.x + p->physics.velocity.x * delta_time * 32.0F,
+						p->pos.y + p->physics.velocity.y * delta_time * 32.0F,
+						p->pos.z + p->physics.velocity.z * delta_time * 32.0F);
 		if(!aabb_intersection_terrain(&dead_bb, 0)) {
-			p->pos.x += p->physics.velocity.x * fsynctics * 32.0F;
-			p->pos.y += p->physics.velocity.y * fsynctics * 32.0F;
-			p->pos.z += p->physics.velocity.z * fsynctics * 32.0F;
+			p->pos.x += p->physics.velocity.x * delta_time * 32.0F;
+			p->pos.y += p->physics.velocity.y * delta_time * 32.0F;
+			p->pos.z += p->physics.velocity.z * delta_time * 32.0F;
 		} else {
 			p->physics.velocity.x *= 0.36F;
 			p->physics.velocity.y *= -0.36F;
@@ -1052,7 +1052,7 @@ int player_move(struct Player* p, float fsynctics, int id) {
 		p->physics.velocity.z = -0.36f;
 	}
 
-	f = fsynctics; // player acceleration scalar
+	f = delta_time; // player acceleration scalar
 	if(p->physics.airborne)
 		f *= 0.1f;
 	else if(p->input.keys.crouch)
@@ -1084,17 +1084,17 @@ int player_move(struct Player* p, float fsynctics, int id) {
 		p->physics.velocity.y += sy * f;
 	}
 
-	f = fsynctics + 1;
-	p->physics.velocity.z += fsynctics;
+	f = delta_time + 1;
+	p->physics.velocity.z += delta_time;
 	p->physics.velocity.z /= f; // air friction
 	if(p->physics.wade)
-		f = fsynctics * 6.0F + 1; // water friction
+		f = delta_time * 6.0F + 1; // water friction
 	else if(!p->physics.airborne)
-		f = fsynctics * 4.0F + 1; // ground friction
+		f = delta_time * 4.0F + 1; // ground friction
 	p->physics.velocity.x /= f;
 	p->physics.velocity.y /= f;
 	f2 = p->physics.velocity.z;
-	player_boxclipmove(p, fsynctics);
+	player_boxclipmove(p, delta_time);
 	// hit ground... check if hurt
 
 	int ret = 0;
