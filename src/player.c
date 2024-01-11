@@ -873,19 +873,6 @@ int player_clipbox(float x, float y, float z) {
 	return !map_isair((int)x, 63 - sz, (int)y);
 }
 
-void player_reposition(struct Player* p) {
-	p->physics.eye.x = p->pos.x;
-	p->physics.eye.y = p->pos.y;
-	p->physics.eye.z = p->pos.z;
-	float f = p->physics.lastclimb - window_time();
-	if(f > -0.25F && !p->input.keys.crouch) {
-		p->physics.eye.z += (f + 0.25F) / 0.25F;
-		if(&players[local_player_id] == p) {
-			last_cy = 63.0F - p->physics.eye.z;
-		}
-	}
-}
-
 void player_coordsystem_adjust1(struct Player* p) {
 	float tmp;
 
@@ -925,8 +912,24 @@ void player_coordsystem_adjust2(struct Player* p) {
 	p->orientation.y = -p->orientation.z;
 	p->orientation.z = tmp;
 }
+
+void player_reposition(struct Player* p) {
+	p->physics.eye.x = p->pos.x;
+	p->physics.eye.y = p->pos.y;
+	p->physics.eye.z = p->pos.z;
+
+	// sets up smooth camera motion while climbing
+	float f = p->physics.lastclimb - window_time();
+	if(f > -0.25F && !p->input.keys.crouch) {
+		p->physics.eye.z += (f + 0.25F) / 0.25F;
+		if(&players[local_player_id] == p) {
+			last_cy = 63.0F - p->physics.eye.z;
+		}
+	}
+}
+
 void player_boxclipmove(struct Player* p, float delta_time) {
-	float z_offset, m, delta_time_scaled, new_x, new_y, new_z, delta_z;
+	float z_offset, starting_delta_z, delta_time_scaled, new_x, new_y, new_z, delta_z;
 	long climb = 0;
 
 	delta_time_scaled = delta_time * 32.f;
@@ -935,25 +938,32 @@ void player_boxclipmove(struct Player* p, float delta_time) {
 
 	if(p->input.keys.crouch) {
 		z_offset = 0.45f;
-		m = 0.9f;
+		starting_delta_z = 0.9f;
 	} else {
 		z_offset = 0.9f;
-		m = 1.35f;
+		starting_delta_z = 1.35f;
 	}
 
 	new_z = p->pos.z + z_offset;
+
+	// try to walk player in x direction
 
 	float direction_velocity;
 	if(p->physics.velocity.x < 0)
 		direction_velocity = -0.45f;
 	else
 		direction_velocity = 0.45f;
-	delta_z = m;
+	delta_z = starting_delta_z;
+
+	// check if out of bounds and if there is ground to stand on
+	// checks for two points on the Y axis 0.9f units apart
 	while(delta_z >= -1.36f && !player_clipbox(new_x + direction_velocity, p->pos.y - 0.45f, new_z + delta_z)
 		  && !player_clipbox(new_x + direction_velocity, p->pos.y + 0.45f, new_z + delta_z))
 		delta_z -= 0.9f;
+	// nothing to climb, just move player
 	if(delta_z < -1.36f)
 		p->pos.x = new_x;
+	// try to climb
 	else if(!p->input.keys.crouch && p->orientation.z < 0.5f && !p->input.keys.sprint) {
 		delta_z = 0.35f;
 		while(delta_z >= -2.36f && !player_clipbox(new_x + direction_velocity, p->pos.y - 0.45f, new_z + delta_z)
@@ -967,16 +977,23 @@ void player_boxclipmove(struct Player* p, float delta_time) {
 	} else
 		p->physics.velocity.x = 0;
 
+	// try to walk player in x direction
 	if(p->physics.velocity.y < 0)
 		direction_velocity = -0.45f;
 	else
 		direction_velocity = 0.45f;
-	delta_z = m;
+
+	delta_z = starting_delta_z;
+
+	// check if out of bounds and if there is ground to stand on
+	// checks for two points on the Y axis 0.9f units apart
 	while(delta_z >= -1.36f && !player_clipbox(p->pos.x - 0.45f, new_y + direction_velocity, new_z + delta_z)
 		  && !player_clipbox(p->pos.x + 0.45f, new_y + direction_velocity, new_z + delta_z))
 		delta_z -= 0.9f;
+	// nothing to climb, just move player
 	if(delta_z < -1.36f)
 		p->pos.y = new_y;
+	// try to climb
 	else if(!p->input.keys.crouch && p->orientation.z < 0.5f && !p->input.keys.sprint && !climb) {
 		delta_z = 0.35f;
 		while(delta_z >= -2.36f && !player_clipbox(p->pos.x - 0.45f, new_y + direction_velocity, new_z + delta_z)
@@ -995,19 +1012,21 @@ void player_boxclipmove(struct Player* p, float delta_time) {
 		p->physics.velocity.y *= 0.5f;
 		p->physics.lastclimb = window_time();
 		new_z--;
-		m = -1.35f;
+		starting_delta_z = -1.35f;
 	} else {
 		if(p->physics.velocity.z < 0)
-			m = -m;
+			starting_delta_z = -starting_delta_z;
 		new_z += p->physics.velocity.z * delta_time * 32.f;
 	}
 
 	p->physics.airborne = 1;
 
-	if(player_clipbox(p->pos.x - 0.45f, p->pos.y - 0.45f, new_z + m)
-	   || player_clipbox(p->pos.x - 0.45f, p->pos.y + 0.45f, new_z + m)
-	   || player_clipbox(p->pos.x + 0.45f, p->pos.y - 0.45f, new_z + m)
-	   || player_clipbox(p->pos.x + 0.45f, p->pos.y + 0.45f, new_z + m)) {
+	// check that the player isn't airborne
+	// on four points on the X and Y axis 0.45f units away from the player
+	if(player_clipbox(p->pos.x - 0.45f, p->pos.y - 0.45f, new_z + starting_delta_z)
+	   || player_clipbox(p->pos.x - 0.45f, p->pos.y + 0.45f, new_z + starting_delta_z)
+	   || player_clipbox(p->pos.x + 0.45f, p->pos.y - 0.45f, new_z + starting_delta_z)
+	   || player_clipbox(p->pos.x + 0.45f, p->pos.y + 0.45f, new_z + starting_delta_z)) {
 		if(p->physics.velocity.z >= 0) {
 			p->physics.wade = p->pos.z > 61;
 			p->physics.airborne = 0;
@@ -1016,6 +1035,7 @@ void player_boxclipmove(struct Player* p, float delta_time) {
 	} else
 		p->pos.z = new_z - z_offset;
 
+	// now that player pos is updated, update camera xyz
 	player_reposition(p);
 }
 
